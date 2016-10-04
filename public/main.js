@@ -1,6 +1,7 @@
 'use strict'
 // Front End
 // Don't put game logic on front end
+// Using DOM as a data plan is brittle
 const socket = io()
 
 socket.on('connect', () => console.log(`Socket connected: ${socket.id}`))
@@ -9,6 +10,7 @@ socket.on('disconnect', () => console.log('Socket disconnected'))
 const board = document.querySelector('.board')
 const status = document.querySelector('.status')
 
+// Creates a matrix
 const boardState = [
   ['','',''],
   ['','',''],
@@ -17,6 +19,7 @@ const boardState = [
 
 let nextPlayer = 'X'
 
+// Wipe board and reload
 const drawBoard = b => {
   board.innerHTML = `
     <table>
