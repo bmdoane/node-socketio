@@ -1,5 +1,5 @@
 'use strict'
-// Backend
+
 const express = require('express')
 const { Server } = require('http')
 const mongoose = require('mongoose')
@@ -24,36 +24,35 @@ mongoose.connect(MONGODB_URL, () => {
 })
 
 const Game = mongoose.model('game', {
-	board: [
-		[String, String, String],
-		[String, String, String],	
-		[String, String, String]			
-	]
+  board: [
+    [String, String, String],
+    [String, String, String],
+    [String, String, String],
+  ],
+  toMove: String,
 })
 
-// When server receives a connect event a new game is started
-// Get individual socket of a user
-// When a new socket is generated
 io.on('connect', socket => {
   Game.create({
-    board: [['','',''],['','',''],['','','']]
+    board: [['','',''],['','',''],['','','']],
+    toMove: 'X',
   })
   .then(g => {
     socket.game = g
-    socket.emit('new game', socket.game)
+    socket.emit('new game', g)
   })
   .catch(err => {
-  	socket.emit('error', err)
-  	console.error(err)
+    socket.emit('error', err)
+    console.error(err)
   })
 
   socket.on('make move', ({ row, col }) => {
-    socket.game.board[row][col] = 'X'
-    socket.game.markModified('board') // trigger mongoose change detection    
+    socket.game.board[row][col] = socket.game.toMove
+    socket.game.toMove = socket.game.toMove === 'X' ? 'O' : 'X'
+    socket.game.markModified('board') // trigger mongoose change detection
     socket.game.save().then(g => socket.emit('move made', g))
   })
 
   console.log(`Socket connected: ${socket.id}`)
   socket.on('disconnect', () => console.log(`Socket disconnected: ${socket.id}`))
 })
-
