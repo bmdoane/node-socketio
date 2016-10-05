@@ -100,7 +100,6 @@ board.addEventListener('click', evt => {
   socket.emit('make move', { row, col })  
 
   boardState[row][col] = nextPlayer
-  drawBoard(boardState)
   console.log('Current game state:', board)
 
   if (winner(boardState)) {
