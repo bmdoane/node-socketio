@@ -16,7 +16,23 @@ app.set('view engine', 'pug')
 
 app.use(express.static('public'))
 
-app.get('/', (req, res) => res.render('index'))
+app.get('/', (req, res) => res.render('home'))
+
+app.get('/game', (req, res) =>
+  Game.find().then(games => res.render('index', { games }))
+)
+
+app.get('/game/create', (req, res) => {
+  Game.create({
+    board: [['','',''],['','',''],['','','']],
+    toMove: 'X',
+  })
+  .then(game => res.redirect(`/game/${game._id}`))
+})
+
+app.get('/game/:id', (req, res) => {
+  res.render('game')
+})
 
 mongoose.Promise = Promise
 mongoose.connect(MONGODB_URL, () => {
@@ -30,15 +46,16 @@ const Game = mongoose.model('game', {
     [String, String, String],
   ],
   toMove: String,
+  result: String,
 })
 
 io.on('connect', socket => {
-  Game.create({
-    board: [['','',''],['','',''],['','','']],
-    toMove: 'X',
-  })
+  const id = socket.handshake.headers.referer.split('/').slice(-1)[0]
+
+  Game.findById(id)
   .then(g => {
-    socket.game = g
+    socket.join(g._id)
+    socket.gameId = g._id
     socket.emit('new game', g)
   })
   .catch(err => {
@@ -46,13 +63,103 @@ io.on('connect', socket => {
     console.error(err)
   })
 
-  socket.on('make move', ({ row, col }) => {
-    socket.game.board[row][col] = socket.game.toMove
-    socket.game.toMove = socket.game.toMove === 'X' ? 'O' : 'X'
-    socket.game.markModified('board') // trigger mongoose change detection
-    socket.game.save().then(g => socket.emit('move made', g))
-  })
-
   console.log(`Socket connected: ${socket.id}`)
+
+  socket.on('make move', move => makeMove(move, socket))
   socket.on('disconnect', () => console.log(`Socket disconnected: ${socket.id}`))
 })
+
+const makeMove = (move, socket) => {
+  console.log("socket.gameId", socket.gameId);
+  Game.findById(socket.gameId)
+    .then(game => {
+      console.log("game1", game)
+      // if (isFinished(game) || !isSpaceAvailable(game, move)) {
+      //   console.log("game2", game);
+        return game
+      // }
+    })
+    .then(g => setMove(g, move))
+    .then(toggleNextMove)
+    .then(setResult)
+    .then(g => g.save())
+    .then(g => io.to(g._id).emit('move made', g))
+    .catch(console.error)
+}
+
+const isFinished = game => !!game.result
+const isSpaceAvailable = (game, move) => !game.board[move.row][move.col]
+const setMove = (game, move) => {
+  console.log("game", game);
+  game.board[move.row][move.col] = game.toMove
+  game.markModified('board') // trigger mongoose change detection
+  return game
+}
+const toggleNextMove = game => {
+  game.toMove = game.toMove === 'X' ? 'O' : 'X'
+  return game
+}
+const setResult = game => {
+  const result = winner(game.board)
+
+  if (result) {
+    game.toMove = undefined // mongoose equivalent to: `delete socket.game.toMove`
+    game.result = result
+  }
+
+  return game
+}
+
+const winner = b => {
+  // Rows
+  if (b[0][0] && b[0][0] === b[0][1] && b[0][1] === b[0][2]) {
+    return b[0][0]
+  }
+
+  if (b[1][0] && b[1][0] === b[1][1] && b[1][1] === b[1][2]) {
+    return b[1][0]
+  }
+
+  if (b[2][0] && b[2][0] === b[2][1] && b[2][1] === b[2][2]) {
+    return b[2][0]
+  }
+
+  // Cols
+  if (b[0][0] && b[0][0] === b[1][0] && b[1][0] === b[2][0]) {
+    return b[0][0]
+  }
+
+  if (b[0][1] && b[0][1] === b[1][1] && b[1][1] === b[2][1]) {
+    return b[0][1]
+  }
+
+  if (b[0][2] && b[0][2] === b[1][2] && b[1][2] === b[2][2]) {
+    return b[0][2]
+  }
+
+  // Diags
+  if (b[0][0] && b[0][0] === b[1][1] && b[1][1] === b[2][2]) {
+    return b[0][0]
+  }
+
+  if (b[0][2] && b[0][2] === b[1][1] && b[1][1] === b[2][0]) {
+    return b[0][2]
+  }
+
+  // Tie
+  if (!movesRemaining(b)) {
+    return 'Tie'
+  }
+
+  // In-Progress
+  return null
+}
+
+const movesRemaining = board => {
+  const POSSIBLE_MOVES = 9
+  const movesMade = flatten(board).join('').length
+
+  return POSSIBLE_MOVES - movesMade
+}
+
+const flatten = array => array.reduce((a,b) => a.concat(b))
