@@ -70,14 +70,14 @@ io.on('connect', socket => {
 })
 
 const makeMove = (move, socket) => {
-  console.log("socket.gameId", socket.gameId);
   Game.findById(socket.gameId)
     .then(game => {
-      console.log("game1", game)
-      // if (isFinished(game) || !isSpaceAvailable(game, move)) {
-      //   console.log("game2", game);
-        return game
-      // }
+      if (isFinished(game) || !isSpaceAvailable(game, move)) {
+        // Need return here to end game
+        return
+      }
+      // Or keep playing by returning game object
+      return game
     })
     .then(g => setMove(g, move))
     .then(toggleNextMove)
@@ -90,7 +90,6 @@ const makeMove = (move, socket) => {
 const isFinished = game => !!game.result
 const isSpaceAvailable = (game, move) => !game.board[move.row][move.col]
 const setMove = (game, move) => {
-  console.log("game", game);
   game.board[move.row][move.col] = game.toMove
   game.markModified('board') // trigger mongoose change detection
   return game
